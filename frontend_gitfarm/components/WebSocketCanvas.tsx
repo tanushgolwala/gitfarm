@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const WS_SERVER = "ws://localhost:8080/ws"; // Replace with your WebSocket server URL
+const WS_SERVER = "ws://localhost:8080/ws?id=2"; // Replace with your WebSocket server URL
 
 const WebSocketCanvas = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -38,8 +38,10 @@ const WebSocketCanvas = () => {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        // console.log("WebSocket message", data);
 
-        if (data.to === "1" && data.from === "2" && data.gestval === "draw") {
+        if (data.to === "2" && data.from === "1") {
+            console.log("Drawing point", data.xval, data.yval);
           drawPoint(data.xval, data.yval);
         }
       } catch (error) {
