@@ -12,8 +12,12 @@ hands = mp_hands.Hands(
 mp_draw = mp.solutions.drawing_utils
 
 # Initialize video capture
-cap = cv2.VideoCapture(0)
+capture_url = 'rtsp://100.68.210.10:8080/h264_pcm.sdp'
 
+try:
+    cap = cv2.VideoCapture(capture_url)
+except:
+    cap = cv2.VideoCapture(0)
 # Create mask for drawing
 drawing_mask = None
 prev_point = None
