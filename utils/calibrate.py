@@ -17,4 +17,3 @@ def get_whiteboard(image):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
     return coords
-

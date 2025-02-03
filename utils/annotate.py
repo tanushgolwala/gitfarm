@@ -4,8 +4,9 @@ import numpy as np
 from collections import deque
 
 class HandDrawingAnnotator:
-    def __init__(self):
+    def __init__(self,coords):
         # Initialize MediaPipe Hands
+        self.coords = coords
         self.mp_hands = mp.solutions.hands
         self.hands = self.mp_hands.Hands(
             max_num_hands=1,
@@ -33,6 +34,13 @@ class HandDrawingAnnotator:
         x = int(sum(p[0] for p in self.point_buffer) / len(self.point_buffer))
         y = int(sum(p[1] for p in self.point_buffer) / len(self.point_buffer))
         return (x, y)
+    
+    def check_inside_polygon(self,x,y,):
+        polygon = np.array(self.coords,np.int32)
+        result = cv2.pointPolygonTest(polygon, (x,y), False)
+        if result < 0:
+            return False
+        return True
 
     def fingers_joined(self, hand_landmarks, h, w, threshold=40):
         try:
@@ -65,12 +73,17 @@ class HandDrawingAnnotator:
                     fingers_together, draw_point = self.fingers_joined(hand_landmarks, h, w)
                     
                     if fingers_together and draw_point:
-                        cv2.circle(frame, draw_point, 10, (0, 255, 0), -1)
-                        
-                        if self.prev_point is not None and self.calculate_distance(self.prev_point, draw_point) < 50:
-                            cv2.line(self.drawing_mask, self.prev_point, draw_point, self.color, self.thickness)
-                        self.prev_point = draw_point
-                        self.drawing = True
+                        # Check if the draw_point is inside the polygon
+                        if self.check_inside_polygon(draw_point[0], draw_point[1]):
+                            cv2.circle(frame, draw_point, 10, (0, 255, 0), -1)
+                            
+                            if self.prev_point is not None and self.calculate_distance(self.prev_point, draw_point) < 50:
+                                cv2.line(self.drawing_mask, self.prev_point, draw_point, self.color, self.thickness)
+                            self.prev_point = draw_point
+                            self.drawing = True
+                        else:
+                            self.drawing = False
+                            self.prev_point = None
                     else:
                         self.drawing = False
                         self.prev_point = None
