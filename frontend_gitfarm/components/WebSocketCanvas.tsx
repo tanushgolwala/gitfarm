@@ -74,18 +74,7 @@ const WebSocketCanvas = () => {
   return (
     <div style={{ position: "relative", width: "100vw", height: "100vh" }}>
       {/* Floating Sidebar */}
-      <div
-        style={{
-          position: "absolute",
-          top: "20px",
-          left: "20px",
-          width: "220px",
-          padding: "10px",
-          background: "#f4f4f4",
-          borderRadius: "10px",
-          boxShadow: "0px 4px 10px rgba(0, 0, 0, 0.1)",
-        }}
-      >
+      <div className="absolute bottom-5 left-1/2 bg-black p-5 rounded-lg shadow-lg">
         <h3>WebSocket Status: {isConnected ? "🟢 Connected" : "🔴 Disconnected"}</h3>
         <hr />
         <button onClick={resetCanvas} style={{ background: "red", color: "white", padding: "5px", width: "100%" }}>
