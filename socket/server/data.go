@@ -11,6 +11,8 @@ type Message struct {
 	Xval    float64 `json:"xval"`
 	Yval    float64 `json:"yval"`
 	Gestval string  `json:"gestval"`
+	DimX	float64 `json:"xdim"`
+	DimY	float64 `json:"ydim"`
 }
 
 // ParseData parses a JSON-encoded message with basic validation
