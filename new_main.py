@@ -32,6 +32,30 @@ class GestureReader:
             self.xdim, self.ydim = 1920, 1080
         print(f"Whiteboard dimensions: {self.xdim} x {self.ydim}")
         self.init_mediapipe()
+        self.init_gestures()
+        self.gesture_result = None
+        self.options = self.GestureRecognizerOptions(
+            base_options=self.BaseOptions(model_asset_path="gesture_recognizer.task"),  
+            running_mode=self.VisionRunningMode.LIVE_STREAM,
+            result_callback=self.set_gesture
+        )
+
+
+    def init_gestures(self):
+        # Initialize MediaPipe Gesture Recognizer
+        self.BaseOptions = mp.tasks.BaseOptions
+        self.GestureRecognizer = mp.tasks.vision.GestureRecognizer
+        self.GestureRecognizerOptions = mp.tasks.vision.GestureRecognizerOptions
+        self.GestureRecognizerResult = mp.tasks.vision.GestureRecognizerResult
+        self.VisionRunningMode = mp.tasks.vision.RunningMode
+
+    def set_gesture(self, result, output_image, timestamp_ms):
+        """Callback function that receives gesture recognition results."""
+        if result and result.gestures:
+            self.gesture_result = result.gestures[0][0].category_name
+        else:
+            self.gesture_result = None
+
 
     def get_whiteboard(self, image):
         """ Allow user to define a region by clicking four points. """
@@ -126,31 +150,31 @@ class GestureReader:
             for hand_landmarks in results.multi_hand_landmarks:
                 h, w, _ = frame.shape
                 fingers_together, join_point = self.fingers_joined(hand_landmarks, h, w)
-                open_palm, erase_point = self.open_palm_detected(hand_landmarks, h, w)
-                thumbs_up, next_point = self.thumbs_up_detected(hand_landmarks, h, w)
-                thumbs_down, prev_point = self.thumbs_down_detected(hand_landmarks, h, w)
+                # open_palm, erase_point = self.open_palm_detected(hand_landmarks, h, w)
+                # thumbs_up, next_point = self.thumbs_up_detected(hand_landmarks, h, w)
+                # thumbs_down, prev_point = self.thumbs_down_detected(hand_landmarks, h, w)
 
 
-                if open_palm and erase_point:
-                    xval, yval = erase_point
-                    if self.check_inside_polygon(xval, yval):
-                        print(f"Erase gesture detected at: {xval}, {yval}")
-                        self.ws_sender.send_sync(xval, yval, 'erase', self.xdim, self.ydim)
-                        return
+                # if open_palm and erase_point:
+                #     xval, yval = erase_point
+                #     if self.check_inside_polygon(xval, yval):
+                #         print(f"Erase gesture detected at: {xval}, {yval}")
+                #         self.ws_sender.send_sync(xval, yval, 'erase', self.xdim, self.ydim)
+                #         return
                 
-                if thumbs_up and next_point:
-                    xval, yval = next_point
-                    if self.check_inside_polygon(xval, yval):
-                        print(f"Next slide gesture detected at: {xval}, {yval}")
-                        self.ws_sender.send_sync(xval, yval, 'next', self.xdim, self.ydim)
-                        return
+                # if thumbs_up and next_point:
+                #     xval, yval = next_point
+                #     if self.check_inside_polygon(xval, yval):
+                #         print(f"Next slide gesture detected at: {xval}, {yval}")
+                #         self.ws_sender.send_sync(xval, yval, 'next', self.xdim, self.ydim)
+                #         return
 
-                if thumbs_down and prev_point:
-                    xval, yval = prev_point
-                    if self.check_inside_polygon(xval, yval):
-                        print(f"Previous slide gesture detected at: {xval}, {yval}")
-                        self.ws_sender.send_sync(xval, yval, 'previous', self.xdim, self.ydim)
-                        return
+                # if thumbs_down and prev_point:
+                #     xval, yval = prev_point
+                #     if self.check_inside_polygon(xval, yval):
+                #         print(f"Previous slide gesture detected at: {xval}, {yval}")
+                #         self.ws_sender.send_sync(xval, yval, 'previous', self.xdim, self.ydim)
+                #         return
 
                 if join_point:
                     xval, yval = join_point
@@ -232,13 +256,22 @@ class GestureReader:
 
     def start_recognition(self):
         """ Start the video capture loop and process frames. """
-        while self.cap.isOpened():
-            ret, frame = self.cap.read()
-            if not ret:
-                break
+        with self.GestureRecognizer.create_from_options(self.options) as recognizer:
+            while self.cap.isOpened():
+                ret, frame = self.cap.read()
+                if not ret:
+                    break
 
-            frame = cv2.flip(frame, 1)
-            self.print_finger_join_point(frame)
+                frame = cv2.flip(frame, 1)
+
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                recognizer.recognize_async(mp_image, int(self.cap.get(cv2.CAP_PROP_POS_MSEC)))
+                if self.gesture_result and self.gesture_result != "None":
+                    print(self.gesture_result)
+                    self.ws_sender.send_sync(0, 0, self.gesture_result, self.xdim, self.ydim)
+                else:
+                    self.print_finger_join_point(frame)
+
 
 class WebSocketSyncSender:
     def __init__(self, url, from_id, to_id):
