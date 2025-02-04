@@ -10,6 +10,7 @@ class GestureReader:
     def __init__(self, ip, ws_sender):
         try:
             self.cap = cv2.VideoCapture(0)
+            self.cap = cv2.VideoCapture(0)
         except:
             self.cap = cv2.VideoCapture(0)
 
@@ -20,7 +21,17 @@ class GestureReader:
 
         self.coords = []
         self.ws_sender = ws_sender  # WebSocket sender instance
-        self.get_whiteboard(frame)  # Ensure the method is present
+        self.get_whiteboard(frame)
+        self.xdim = 0
+        self.ydim = 0
+        
+        if len(self.coords) == 4:
+            x_vals, y_vals = zip(*self.coords)
+            self.xdim = max(x_vals) - min(x_vals)
+            self.ydim = max(y_vals) - min(y_vals)
+        else:
+            self.xdim, self.ydim = 1920, 1080
+        print(f"Whiteboard dimensions: {self.xdim} x {self.ydim}")
         self.init_mediapipe()
 
     def get_whiteboard(self, image):
@@ -74,6 +85,38 @@ class GestureReader:
             return distance < threshold, (index_x, index_y)
         except (AttributeError, TypeError):
             return False, None
+    
+    def open_palm_detected(self, hand_landmarks, h, w):
+        """ Detect if an open palm is present (all fingers extended). """
+        try:
+            fingers = [
+                self.mp_hands.HandLandmark.THUMB_TIP,
+                self.mp_hands.HandLandmark.INDEX_FINGER_TIP,
+                self.mp_hands.HandLandmark.MIDDLE_FINGER_TIP,
+                self.mp_hands.HandLandmark.RING_FINGER_TIP,
+                self.mp_hands.HandLandmark.PINKY_TIP
+            ]
+
+            base_joints = [
+                self.mp_hands.HandLandmark.THUMB_CMC,
+                self.mp_hands.HandLandmark.INDEX_FINGER_MCP,
+                self.mp_hands.HandLandmark.MIDDLE_FINGER_MCP,
+                self.mp_hands.HandLandmark.RING_FINGER_MCP,
+                self.mp_hands.HandLandmark.PINKY_MCP
+            ]
+
+            tip_coords = [(int(hand_landmarks.landmark[f].x * w), int(hand_landmarks.landmark[f].y * h)) for f in fingers]
+            base_coords = [(int(hand_landmarks.landmark[b].x * w), int(hand_landmarks.landmark[b].y * h)) for b in base_joints]
+
+            # Check if all fingertips are above their respective MCP joints (hand is open)
+            all_extended = all(tip[1] < base[1] for tip, base in zip(tip_coords[1:], base_coords[1:]))
+
+            # Check if thumb is extended away from index finger
+            thumb_extended = abs(tip_coords[0][0] - tip_coords[1][0]) > 40
+
+            return all_extended and thumb_extended, tip_coords[2]  # Use middle finger tip as reference
+        except (AttributeError, TypeError):
+            return False, None
 
     def print_finger_join_point(self, frame):
         """ Detect finger join points and send them via WebSocket. """
@@ -84,13 +127,20 @@ class GestureReader:
             for hand_landmarks in results.multi_hand_landmarks:
                 h, w, _ = frame.shape
                 fingers_together, join_point = self.fingers_joined(hand_landmarks, h, w)
+                open_palm, erase_point = self.open_palm_detected(hand_landmarks, h, w)
 
                 if join_point:
                     xval, yval = join_point
                     message_type = "draw" if fingers_together else "laser"
                     if self.check_inside_polygon(xval, yval):
-                        print(f"Finger detected at: {xval}, {yval} with type {message_type}")
-                        self.ws_sender.send_sync(xval, yval, message_type)
+                        print(f"Finger join detected at: {xval}, {yval}")
+                        self.ws_sender.send_sync(xval, yval, 'tap', self.xdim, self.ydim)
+
+                if open_palm and erase_point:
+                    xval, yval = erase_point
+                    if self.check_inside_polygon(xval, yval):
+                        print(f"Erase gesture detected at: {xval}, {yval}")
+                        self.ws_sender.send_sync(xval, yval, 'erase', self.xdim, self.ydim)
 
     def start_recognition(self):
         """ Start the video capture loop and process frames. """
@@ -109,14 +159,16 @@ class WebSocketSyncSender:
         self.to_id = to_id
         self.socket = None
 
-    def send_sync(self, xval, yval, gestval):
+    def send_sync(self, xval, yval, gestval, xdim, ydim):
         """ Send (xval, yval) data synchronously to WebSocket. """
         message = json.dumps({
             'to': self.to_id,
             'from': self.from_id,
             'xval': xval,
             'yval': yval,
-            'gestval': gestval
+            'gestval': gestval,
+            'xdim': xdim,
+            'ydim': ydim
         })
         try:
             asyncio.run(self._send_message(message))
@@ -124,13 +176,9 @@ class WebSocketSyncSender:
             print(f"WebSocket send error: {e}")
 
     async def _send_message(self, message):
-        """ Internal method to connect and send data via WebSocket. """
         async with websockets.connect(self.url) as websocket:
             await websocket.send(message)
 
-# Initialize WebSocket sender
 ws_sender = WebSocketSyncSender('ws://localhost:8080/ws', '1', '2')
-
-# Start GestureReader with WebSocket integration
-reader = GestureReader("rtsp://100.91.39.25:8080/h264_pcm.sdp", ws_sender)
+reader = GestureReader("rtsp://192.0.0.4:8080/h264_pcm.sdp", ws_sender)
 reader.start_recognition()

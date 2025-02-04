@@ -41,39 +41,45 @@ const WebSocketCanvas = () => {
         }
     }, []);
 
-    useEffect(() => {
-        const ws = new WebSocket(WS_SERVER);
+  useEffect(() => {
+    const ws = new WebSocket(WS_SERVER);
 
-        ws.onopen = () => {
-            console.log("Connected to WebSocket");
-            setIsConnected(true);
-        };
+    ws.onopen = () => {
+      console.log("Connected to WebSocket");
+      setIsConnected(true);
+    };
 
-        ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                if (data.to === "2" && data.from === "1") {
-                    if (data.gestval === "draw") {
-                        pointCounterRef.current += 1;
-                        if (pointCounterRef.current % 2 === 0) {
-                            drawPoint(data.xval, data.yval);
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error("Invalid WebSocket message", error);
-            }
-        };
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
 
-        ws.onclose = () => {
-            console.log("WebSocket closed");
-            setIsConnected(false);
-        };
+        if (data.to === "2" && data.from === "1") {
+          pointCounterRef.current += 1;
+          if (pointCounterRef.current % 2 === 0) {
+            console.log("Drawing point", data.xdim, data.ydim);
 
-        return () => {
-            ws.close();
-        };
-    }, []);
+            const x_scaled = data.xval * (window.innerWidth / data.xdim) * 0.75;
+            const y_scaled =
+              data.yval * (window.innerHeight / data.ydim) * 0.75;
+            console.log("Drawing point", x_scaled, y_scaled);
+
+            drawPoint(x_scaled, y_scaled);
+          }
+        }
+      } catch (error) {
+        console.error("Invalid WebSocket message", error);
+      }
+    };
+
+    ws.onclose = () => {
+      console.log("WebSocket closed");
+      setIsConnected(false);
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, []);
 
     const drawPoint = (x: number, y: number) => {
         if (!drawingCtxRef.current) return;
