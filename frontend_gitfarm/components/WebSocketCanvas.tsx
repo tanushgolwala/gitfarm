@@ -1,5 +1,5 @@
 "use client";
-
+import { useCallback } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -12,16 +12,19 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 
 const WS_SERVER = "ws://localhost:8080/ws?id=2";
 const DISTANCE_THRESHOLD = 30;
+const GESTURE_COOLDOWN = 500;
 
 const WebSocketCanvas = () => {
   const drawingCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const pdfContainerRef = useRef<HTMLDivElement | null>(null); // Captures both PDF and Annotations
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
-
+  const lastGestureTimeRef = useRef<number>(0);
   const [isConnected, setIsConnected] = useState(false);
   const [pdfFile, setPdfFile] = useState<string | null>(null);
   const [pdfPageWidth, setPdfPageWidth] = useState<number | null>(null);
+  const [numPages, setNumPages] = useState(0);
+  const [pageNumber, setPageNumber] = useState(1);
   const pointCounterRef = useRef(0);
 
   useEffect(() => {
@@ -33,13 +36,40 @@ const WebSocketCanvas = () => {
       const ctx = canvas.getContext("2d");
       if (ctx) {
         ctx.lineWidth = 3;
-        ctx.strokeStyle = "#39FF14";
+        ctx.strokeStyle = "#880808";
         ctx.lineJoin = "round";
         ctx.lineCap = "round";
         drawingCtxRef.current = ctx;
       }
     }
   }, []);
+
+  const resetCanvas = useCallback(() => {
+    if (!drawingCanvasRef.current || !drawingCtxRef.current) return;
+    drawingCtxRef.current.clearRect(
+      0,
+      0,
+      drawingCanvasRef.current.width,
+      drawingCanvasRef.current.height
+    );
+    lastPointRef.current = null;
+  }, []);
+
+  const goToNextPage = useCallback(() => {
+    setPageNumber((prev) => {
+      if (prev >= numPages) return prev;
+      resetCanvas();
+      return prev + 1;
+    });
+  }, [numPages, resetCanvas]);
+
+  const goToPreviousPage = useCallback(() => {
+    setPageNumber((prev) => {
+      if (prev <= 1) return prev;
+      resetCanvas();
+      return prev - 1;
+    });
+  }, [resetCanvas]);
 
   useEffect(() => {
     const ws = new WebSocket(WS_SERVER);
@@ -52,17 +82,34 @@ const WebSocketCanvas = () => {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-
-        if (data.to === "2" && data.from === "1" && data.gestval === "draw") {
+        const now = Date.now();
+        if (now - lastGestureTimeRef.current > GESTURE_COOLDOWN) {
+          lastGestureTimeRef.current = now;
+          if (
+            data.to === "2" &&
+            data.from === "1" &&
+            data.gestval === "Thumb_Up"
+          ) {
+            goToNextPage();
+            return;
+          } else if (
+            data.to === "2" &&
+            data.from === "1" &&
+            data.gestval === "Thumb_Down"
+          ) {
+            goToPreviousPage();
+            return;
+          }
+        } else if (
+          data.to === "2" &&
+          data.from === "1" &&
+          data.gestval === "draw"
+        ) {
           pointCounterRef.current += 1;
           if (pointCounterRef.current % 2 === 0) {
-            console.log("Drawing point", data.xdim, data.ydim);
-
             const x_scaled = data.xval * (window.innerWidth / data.xdim) * 0.75;
             const y_scaled =
               data.yval * (window.innerHeight / data.ydim) * 0.75;
-            console.log("Drawing point", x_scaled, y_scaled);
-
             drawPoint(x_scaled, y_scaled);
           }
         }
@@ -79,7 +126,7 @@ const WebSocketCanvas = () => {
     return () => {
       ws.close();
     };
-  }, []);
+  }, [goToNextPage, goToPreviousPage]);
 
   const drawPoint = (x: number, y: number) => {
     if (!drawingCtxRef.current) return;
@@ -104,15 +151,8 @@ const WebSocketCanvas = () => {
     lastPointRef.current = { x, y };
   };
 
-  const resetCanvas = () => {
-    if (!drawingCanvasRef.current || !drawingCtxRef.current) return;
-    drawingCtxRef.current.clearRect(
-      0,
-      0,
-      drawingCanvasRef.current.width,
-      drawingCanvasRef.current.height
-    );
-    lastPointRef.current = null;
+  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
+    setNumPages(numPages);
   };
 
   const saveAsPDF = async () => {
@@ -152,7 +192,6 @@ const WebSocketCanvas = () => {
 
   return (
     <div className="relative w-screen h-screen bg-[#121212] text-white flex items-center justify-center">
-      {/* Container to capture both PDF and annotations */}
       <div
         ref={pdfContainerRef}
         className="relative flex justify-center w-full h-full"
@@ -161,15 +200,15 @@ const WebSocketCanvas = () => {
           <Document
             file={pdfFile}
             className="shadow-lg rounded-md border z-0 border-gray-700"
+            onLoadSuccess={onDocumentLoadSuccess}
           >
             <Page
-              pageNumber={1}
+              pageNumber={pageNumber}
               width={window.innerWidth * 0.8}
               onLoadSuccess={onPageLoadSuccess}
             />
           </Document>
         )}
-        {/* Annotation Canvas */}
         <canvas
           ref={drawingCanvasRef}
           className="absolute top-0 left-0 w-full z-10 h-full pointer-events-auto"
@@ -180,6 +219,29 @@ const WebSocketCanvas = () => {
         />
       </div>
 
+      {/* Navigation Controls */}
+      {pdfFile && (
+        <div className="absolute top-5 left-1/2 transform -translate-x-1/2 bg-[#222] p-4 rounded-lg shadow-lg border border-gray-700 flex items-center gap-4 z-20">
+          <button
+            onClick={goToPreviousPage}
+            disabled={pageNumber <= 1}
+            className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-500 text-white font-bold py-2 px-4 rounded transition-all duration-300"
+          >
+            ← Previous
+          </button>
+          <span className="text-white">
+            Page {pageNumber} of {numPages}
+          </span>
+          <button
+            onClick={goToNextPage}
+            disabled={pageNumber >= numPages}
+            className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-500 text-white font-bold py-2 px-4 rounded transition-all duration-300"
+          >
+            Next →
+          </button>
+        </div>
+      )}
+
       {/* Control Panel */}
       <div className="absolute bottom-5 left-1/3 bg-[#222] p-4 z-20 rounded-lg shadow-lg border border-gray-700 flex flex-col items-center gap-3">
         <h3 className="text-lg font-semibold">
@@ -188,6 +250,15 @@ const WebSocketCanvas = () => {
             {isConnected ? "🟢 Connected" : "🔴 Disconnected"}
           </span>
         </h3>
+
+        {/* Draw / Erase Status
+        <h3 className="text-lg font-semibold">
+          Mode:{" "}
+          <span className={isErasing ? "text-red-500" : "text-green-500"}>
+            {isErasing ? "🧽 Eraser" : "✏️ Drawing"}
+          </span>
+        </h3> */}
+
         <input
           type="file"
           accept=".pdf"
