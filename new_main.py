@@ -10,6 +10,7 @@ class GestureReader:
     def __init__(self, ip, ws_sender):
         try:
             self.cap = cv2.VideoCapture(0)
+            self.cap = cv2.VideoCapture(0)
         except:
             self.cap = cv2.VideoCapture(0)
 
@@ -128,8 +129,9 @@ class GestureReader:
                 fingers_together, join_point = self.fingers_joined(hand_landmarks, h, w)
                 open_palm, erase_point = self.open_palm_detected(hand_landmarks, h, w)
 
-                if fingers_together and join_point:
+                if join_point:
                     xval, yval = join_point
+                    message_type = "draw" if fingers_together else "laser"
                     if self.check_inside_polygon(xval, yval):
                         print(f"Finger join detected at: {xval}, {yval}")
                         self.ws_sender.send_sync(xval, yval, 'tap', self.xdim, self.ydim)

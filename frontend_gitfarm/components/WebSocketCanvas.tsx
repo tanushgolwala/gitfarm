@@ -1,35 +1,45 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Document, Page, pdfjs } from "react-pdf";
+import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 
-const WS_SERVER = "ws://localhost:8080/ws?id=2"; // WebSocket server URL
+// Configure PDF worker source
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+
+const WS_SERVER = "ws://localhost:8080/ws?id=2";
+const DISTANCE_THRESHOLD = 35;
 
 const WebSocketCanvas = () => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const pointCounterRef = useRef(0);
+    const drawingCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const drawingCtxRef = useRef<CanvasRenderingContext2D | null>(null);
+    const pdfContainerRef = useRef<HTMLDivElement | null>(null); // Captures both PDF and Annotations
+    const lastPointRef = useRef<{ x: number; y: number } | null>(null);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const [isConnected, setIsConnected] = useState(false);
+    const [pdfFile, setPdfFile] = useState<string | null>(null);
+    const [pdfPageWidth, setPdfPageWidth] = useState<number | null>(null);
+    const pointCounterRef = useRef(0);
 
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    useEffect(() => {
+        if (drawingCanvasRef.current) {
+            const canvas = drawingCanvasRef.current;
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = "#39FF14"; // Neon Green for contrast
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
-    ctxRef.current = ctx;
-
-    return () => {
-      ctxRef.current = null;
-    };
-  }, []);
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = "#39FF14";
+                ctx.lineJoin = "round";
+                ctx.lineCap = "round";
+                drawingCtxRef.current = ctx;
+            }
+        }
+    }, []);
 
   useEffect(() => {
     const ws = new WebSocket(WS_SERVER);
@@ -71,78 +81,135 @@ const WebSocketCanvas = () => {
     };
   }, []);
 
-  const drawPoint = (x: number, y: number) => {
-    if (!ctxRef.current) return;
+    const drawPoint = (x: number, y: number) => {
+        if (!drawingCtxRef.current) return;
+        const ctx = drawingCtxRef.current;
 
-    ctxRef.current.lineTo(x, y);
-    ctxRef.current.stroke();
-  };
+        if (lastPointRef.current) {
+            const { x: lastX, y: lastY } = lastPointRef.current;
+            const distance = Math.sqrt((x - lastX) ** 2 + (y - lastY) ** 2);
 
-  const resetCanvas = () => {
-    if (!canvasRef.current || !ctxRef.current) return;
-    ctxRef.current.clearRect(
-      0,
-      0,
-      canvasRef.current.width,
-      canvasRef.current.height
-    );
-  };
+            if (distance > DISTANCE_THRESHOLD) {
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+                ctx.stroke();
+            }
+        } else {
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+        }
 
-  const saveCanvasAsPNG = () => {
-    if (!canvasRef.current || !ctxRef.current) return;
+        lastPointRef.current = { x, y };
+    };
 
-    // Create a temporary canvas to draw the background color
-    const tempCanvas = document.createElement("canvas");
-    const tempCtx = tempCanvas.getContext("2d");
-    if (!tempCtx) return;
+    const resetCanvas = () => {
+        if (!drawingCanvasRef.current || !drawingCtxRef.current) return;
+        drawingCtxRef.current.clearRect(
+            0,
+            0,
+            drawingCanvasRef.current.width,
+            drawingCanvasRef.current.height
+        );
+        lastPointRef.current = null;
+    };
 
-    tempCanvas.width = canvasRef.current.width;
-    tempCanvas.height = canvasRef.current.height;
+    const saveAsPDF = async () => {
+        if (!pdfContainerRef.current) return;
 
-    // Fill the background color
-    tempCtx.fillStyle = "#181818"; // Background color
-    tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+        // Capture everything (PDF + annotations)
+        const canvas = await html2canvas(pdfContainerRef.current, {
+            scale: 2, // Increases quality
+            useCORS: true,
+        });
 
-    // Draw the original canvas on top
-    tempCtx.drawImage(canvasRef.current, 0, 0);
+        const imgData = canvas.toDataURL("image/png");
 
-    // Create a link to download the image
-    const link = document.createElement("a");
-    link.href = tempCanvas.toDataURL("image/jpg");
-    link.download = "gesture_drawing.jpg";
-    link.click();
-  };
+        const pdfDoc = new jsPDF("landscape", "px", "a4"); // Fit into A4
+        const pdfWidth = pdfDoc.internal.pageSize.getWidth();
+        const pdfHeight = pdfDoc.internal.pageSize.getHeight();
 
-  return (
-    <div className="relative w-screen h-screen bg-[#121212] text-white flex items-center justify-center">
-      {/* Full-Page Canvas */}
-      <canvas ref={canvasRef} className="w-full h-full bg-[#181818]" />
+        pdfDoc.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+        pdfDoc.save("annotated_document.pdf");
+    };
 
-      {/* Floating Control Panel */}
-      <div className="absolute bottom-5 left-1/2 transform -translate-x-1/2 bg-[#222] p-5 rounded-lg shadow-lg border border-gray-700 flex flex-col items-center gap-3">
-        <h3 className="text-lg font-semibold">
-          WebSocket Status:{" "}
-          <span className={isConnected ? "text-green-400" : "text-red-500"}>
-            {isConnected ? "🟢 Connected" : "🔴 Disconnected"}
-          </span>
-        </h3>
-        <div className="w-full flex gap-3">
-          <button
-            onClick={resetCanvas}
-            className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded transition-all duration-300"
-          >
-            🔄 Reset Canvas
-          </button>
-          <button
-            onClick={saveCanvasAsPNG}
-            className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition-all duration-300"
-          >
-            💾 Save as PNG
-          </button>
+    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (file.type === "application/pdf") {
+            const fileURL = URL.createObjectURL(file);
+            setPdfFile(fileURL);
+        } else {
+            alert("Only PDFs are supported for now!");
+        }
+    };
+
+    const onPageLoadSuccess = ({ width }: { width: number }) => {
+        setPdfPageWidth(width);
+    };
+
+    return (
+        <div className="relative w-screen h-screen bg-[#121212] text-white flex items-center justify-center">
+            {/* Container to capture both PDF and annotations */}
+            <div ref={pdfContainerRef} className="relative flex justify-center w-full h-full">
+                {pdfFile && (
+                    <Document
+                        file={pdfFile}
+                        className="shadow-lg rounded-md border z-0 border-gray-700"
+                    >
+                        <Page
+                            pageNumber={1}
+                            width={window.innerWidth * 0.8}
+                            onLoadSuccess={onPageLoadSuccess}
+                        />
+                    </Document>
+                )}
+                {/* Annotation Canvas */}
+                <canvas
+                    ref={drawingCanvasRef}
+                    className="absolute top-0 left-0 w-full z-10 h-full pointer-events-auto"
+                    style={{
+                        width: pdfPageWidth ? `${pdfPageWidth}px` : "100%",
+                        height: "auto",
+                    }}
+                />
+            </div>
+
+            {/* Control Panel */}
+            <div className="absolute bottom-5 left-1/3 bg-[#222] p-4 z-20 rounded-lg shadow-lg border border-gray-700 flex flex-col items-center gap-3">
+                <h3 className="text-lg font-semibold">
+                    WebSocket Status:{" "}
+                    <span
+                        className={
+                            isConnected ? "text-green-400" : "text-red-500"
+                        }
+                    >
+                        {isConnected ? "🟢 Connected" : "🔴 Disconnected"}
+                    </span>
+                </h3>
+                <input
+                    type="file"
+                    accept=".pdf"
+                    onChange={handleFileUpload}
+                    className="text-white border border-gray-500 p-2 rounded bg-gray-800"
+                />
+                <button
+                    onClick={resetCanvas}
+                    className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded transition-all duration-300"
+                >
+                    🔄 Reset Canvas
+                </button>
+                <button
+                    onClick={saveAsPDF}
+                    className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded transition-all duration-300"
+                >
+                    📄 Save as PDF
+                </button>
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default WebSocketCanvas;

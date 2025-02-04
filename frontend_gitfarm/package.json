@@ -11,8 +11,12 @@
   "dependencies": {
     "next": "15.1.6",
     "pexels": "^1.4.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^2.5.2",
+    "pdfjs-dist": "^4.10.38",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-pdf": "^9.2.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

@@ -9,7 +9,7 @@ export default function GenerateImagePage() {
     setLoading(true);
     setImageUrl(null);
 
-    const imputprompt = 'Truck Driver';
+    const imputprompt = 'Turing Machine';
 
     const response = await fetch("/api/generate-image", {
       method: "POST",
