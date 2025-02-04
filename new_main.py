@@ -10,7 +10,6 @@ class GestureReader:
     def __init__(self, ip, ws_sender):
         try:
             self.cap = cv2.VideoCapture(0)
-            self.cap = cv2.VideoCapture(0)
         except:
             self.cap = cv2.VideoCapture(0)
 
@@ -119,7 +118,7 @@ class GestureReader:
             return False, None
 
     def print_finger_join_point(self, frame):
-        """ Detect finger join points and send them via WebSocket. """
+        """Detect finger join points and send them via WebSocket."""
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = self.hands.process(rgb_frame)
 
@@ -128,19 +127,103 @@ class GestureReader:
                 h, w, _ = frame.shape
                 fingers_together, join_point = self.fingers_joined(hand_landmarks, h, w)
                 open_palm, erase_point = self.open_palm_detected(hand_landmarks, h, w)
+                thumbs_up, next_point = self.thumbs_up_detected(hand_landmarks, h, w)
+                thumbs_down, prev_point = self.thumbs_down_detected(hand_landmarks, h, w)
 
                 if join_point:
                     xval, yval = join_point
                     message_type = "draw" if fingers_together else "laser"
                     if self.check_inside_polygon(xval, yval):
                         print(f"Finger join detected at: {xval}, {yval}")
-                        self.ws_sender.send_sync(xval, yval, 'tap', self.xdim, self.ydim)
+                        self.ws_sender.send_sync(xval, yval, message_type, self.xdim, self.ydim)
 
                 if open_palm and erase_point:
                     xval, yval = erase_point
                     if self.check_inside_polygon(xval, yval):
                         print(f"Erase gesture detected at: {xval}, {yval}")
                         self.ws_sender.send_sync(xval, yval, 'erase', self.xdim, self.ydim)
+                
+                if thumbs_up and next_point:
+                    xval, yval = next_point
+                    if self.check_inside_polygon(xval, yval):
+                        print(f"Next slide gesture detected at: {xval}, {yval}")
+                        self.ws_sender.send_sync(xval, yval, 'next', self.xdim, self.ydim)
+                
+                if thumbs_down and prev_point:
+                    xval, yval = prev_point
+                    if self.check_inside_polygon(xval, yval):
+                        print(f"Previous slide gesture detected at: {xval}, {yval}")
+                        self.ws_sender.send_sync(xval, yval, 'previous', self.xdim, self.ydim)
+
+    def thumbs_up_detected(self, hand_landmarks, h, w):
+        """Detect if hand is making a thumbs-up gesture."""
+        try:
+            # Get landmarks for all fingertips and their base joints
+            fingers = [
+                self.mp_hands.HandLandmark.INDEX_FINGER_TIP,
+                self.mp_hands.HandLandmark.MIDDLE_FINGER_TIP,
+                self.mp_hands.HandLandmark.RING_FINGER_TIP,
+                self.mp_hands.HandLandmark.PINKY_TIP
+            ]
+            
+            thumb_tip = hand_landmarks.landmark[self.mp_hands.HandLandmark.THUMB_TIP]
+            thumb_ip = hand_landmarks.landmark[self.mp_hands.HandLandmark.THUMB_IP]
+            wrist = hand_landmarks.landmark[self.mp_hands.HandLandmark.WRIST]
+            
+            # Check if all fingers are closed (tips below PIP joints)
+            all_fingers_closed = True
+            for finger in fingers:
+                tip_y = hand_landmarks.landmark[finger].y
+                pip = hand_landmarks.landmark[finger - 2].y  # PIP joint is 2 points before tip
+                if tip_y < pip:  # If tip is above PIP, finger is extended
+                    all_fingers_closed = False
+                    break
+            
+            # Check if thumb is extended upward
+            thumb_extended = thumb_tip.y < thumb_ip.y
+            thumb_pointing_up = thumb_tip.y < wrist.y
+            
+            return all_fingers_closed and thumb_extended and thumb_pointing_up, (
+                int(thumb_tip.x * w),
+                int(thumb_tip.y * h)
+            )
+        except (AttributeError, TypeError):
+            return False, None
+
+    def thumbs_down_detected(self, hand_landmarks, h, w):
+        """Detect if hand is making a thumbs-down gesture."""
+        try:
+            # Get landmarks for all fingertips and their base joints
+            fingers = [
+                self.mp_hands.HandLandmark.INDEX_FINGER_TIP,
+                self.mp_hands.HandLandmark.MIDDLE_FINGER_TIP,
+                self.mp_hands.HandLandmark.RING_FINGER_TIP,
+                self.mp_hands.HandLandmark.PINKY_TIP
+            ]
+            
+            thumb_tip = hand_landmarks.landmark[self.mp_hands.HandLandmark.THUMB_TIP]
+            thumb_ip = hand_landmarks.landmark[self.mp_hands.HandLandmark.THUMB_IP]
+            wrist = hand_landmarks.landmark[self.mp_hands.HandLandmark.WRIST]
+            
+            # Check if all fingers are closed
+            all_fingers_closed = True
+            for finger in fingers:
+                tip_y = hand_landmarks.landmark[finger].y
+                pip = hand_landmarks.landmark[finger - 2].y
+                if tip_y < pip:
+                    all_fingers_closed = False
+                    break
+            
+            # Check if thumb is extended downward
+            thumb_extended = thumb_tip.y > thumb_ip.y
+            thumb_pointing_down = thumb_tip.y > wrist.y
+            
+            return all_fingers_closed and thumb_extended and thumb_pointing_down, (
+                int(thumb_tip.x * w),
+                int(thumb_tip.y * h)
+            )
+        except (AttributeError, TypeError):
+            return False, None
 
     def start_recognition(self):
         """ Start the video capture loop and process frames. """
