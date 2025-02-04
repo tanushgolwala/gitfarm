@@ -11,7 +11,7 @@ import { jsPDF } from "jspdf";
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 const WS_SERVER = "ws://localhost:8080/ws?id=2";
-const DISTANCE_THRESHOLD = 30;
+const DISTANCE_THRESHOLD = 50;
 const GESTURE_COOLDOWN = 500;
 
 const WebSocketCanvas = () => {
@@ -158,6 +158,19 @@ const WebSocketCanvas = () => {
   };
 
   const saveAsPDF = async () => {
+    if (!pdfFile) {
+      // HERE SAVE CANVAS AS PNG
+      if (!drawingCanvasRef.current) return;
+
+      const canvas = drawingCanvasRef.current;
+      const imgData = canvas.toDataURL("image/png");
+
+      const link = document.createElement("a");
+      link.href = imgData;
+      link.download = "canvas_image.png";
+      link.click();
+      return;
+    }
     if (!pdfContainerRef.current) return;
 
     // Capture everything (PDF + annotations)
@@ -201,7 +214,7 @@ const WebSocketCanvas = () => {
         {pdfFile && (
           <Document
             file={pdfFile}
-            className="shadow-lg rounded-md border z-0 border-gray-700"
+            className="shadow-lg rounded-md border z-0 border-gray-700 max-h-[100vh] overflow-hidden"
             onLoadSuccess={onDocumentLoadSuccess}
           >
             <Page
@@ -277,7 +290,7 @@ const WebSocketCanvas = () => {
           onClick={saveAsPDF}
           className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded transition-all duration-300"
         >
-          📄 Save as PDF
+          {pdfFile ? "📄 Save as PDF" : "🖼️ Save as image"}
         </button>
       </div>
     </div>
