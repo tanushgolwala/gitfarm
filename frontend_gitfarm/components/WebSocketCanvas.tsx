@@ -6,6 +6,7 @@ import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import VoiceInputModal from "./VoiceModal";
 
 // Configure PDF worker source
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -29,6 +30,8 @@ const WebSocketCanvas = () => {
   const laserCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const laserCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const laserPointerRef = useRef<{ x: number; y: number } | null>(null);
+
+  const [showImageModal, setShowImageModal] = useState(false);
 
   useEffect(() => {
     if (drawingCanvasRef.current && laserCanvasRef.current) {
@@ -118,6 +121,13 @@ const WebSocketCanvas = () => {
             data.gestval === "Thumb_Down"
           ) {
             goToPreviousPage();
+            return;
+          } else if (
+            data.to === "2" &&
+            data.from === "1" &&
+            data.gestval === "ILoveYou"
+          ) {
+            setShowImageModal((prev) => !prev);
             return;
           }
         } else if (data.to === "2" && data.from === "1") {
@@ -245,6 +255,10 @@ const WebSocketCanvas = () => {
     setPdfPageWidth(width);
   };
 
+  const toggleModal = () => {
+    setShowImageModal((prev) => !prev);
+  };
+
   return (
     <div className="relative min-w-screen min-h-screen bg-[#121212] text-white flex items-center justify-center">
       <div
@@ -281,6 +295,39 @@ const WebSocketCanvas = () => {
           }}
         />
       </div>
+
+      {/* Modal */}
+      {showImageModal && (
+        <div className="absolute top-0 left-0 w-full h-full bg-gray-900 bg-opacity-50 flex items-center justify-center z-30">
+          <div className="relative bg-black p-6 rounded-xl shadow-lg w-80 h-96 flex flex-col items-center justify-center">
+            <h2 className="text-lg font-semibold text-white">Listening...</h2>
+
+            {/* Floating spheres container */}
+            <div className="relative w-32 h-16 mt-6 flex justify-center items-center space-x-2">
+              <div className="w-4 h-4 bg-blue-400 rounded-full animate-pulse"></div>
+              <div className="w-5 h-5 bg-blue-500 rounded-full animate-float"></div>
+              <div className="w-6 h-6 bg-blue-600 rounded-full animate-pulse"></div>
+              <div className="w-5 h-5 bg-blue-500 rounded-full animate-float"></div>
+              <div className="w-4 h-4 bg-blue-400 rounded-full animate-pulse"></div>
+            </div>
+
+            {/* Cool Text Box */}
+            <div className="relative mt-6 w-72">
+              <input
+                type="text"
+                className="w-full bg-transparent border border-blue-500 text-blue-300 text-sm p-2 rounded-md text-center placeholder-blue-400 focus:outline-none animate-glow"
+              />
+            </div>
+
+            <button
+              onClick={toggleModal}
+              className="mt-6 bg-red-500 text-white px-4 py-2 rounded-lg"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Navigation Controls */}
       {pdfFile && (
