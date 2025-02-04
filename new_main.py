@@ -130,30 +130,35 @@ class GestureReader:
                 thumbs_up, next_point = self.thumbs_up_detected(hand_landmarks, h, w)
                 thumbs_down, prev_point = self.thumbs_down_detected(hand_landmarks, h, w)
 
-                if join_point:
-                    xval, yval = join_point
-                    message_type = "draw" if fingers_together else "laser"
-                    if self.check_inside_polygon(xval, yval):
-                        print(f"Finger join detected at: {xval}, {yval}")
-                        self.ws_sender.send_sync(xval, yval, message_type, self.xdim, self.ydim)
 
                 if open_palm and erase_point:
                     xval, yval = erase_point
                     if self.check_inside_polygon(xval, yval):
                         print(f"Erase gesture detected at: {xval}, {yval}")
                         self.ws_sender.send_sync(xval, yval, 'erase', self.xdim, self.ydim)
+                        return
                 
                 if thumbs_up and next_point:
                     xval, yval = next_point
                     if self.check_inside_polygon(xval, yval):
                         print(f"Next slide gesture detected at: {xval}, {yval}")
                         self.ws_sender.send_sync(xval, yval, 'next', self.xdim, self.ydim)
-                
+                        return
+
                 if thumbs_down and prev_point:
                     xval, yval = prev_point
                     if self.check_inside_polygon(xval, yval):
                         print(f"Previous slide gesture detected at: {xval}, {yval}")
                         self.ws_sender.send_sync(xval, yval, 'previous', self.xdim, self.ydim)
+                        return
+
+                if join_point:
+                    xval, yval = join_point
+                    message_type = "draw" if fingers_together else "laser"
+                    if self.check_inside_polygon(xval, yval):
+                        print(f"Finger join detected at: {xval}, {yval}")
+                        self.ws_sender.send_sync(xval, yval, message_type, self.xdim, self.ydim)
+                        return
 
     def thumbs_up_detected(self, hand_landmarks, h, w):
         """Detect if hand is making a thumbs-up gesture."""
