@@ -10,15 +10,16 @@ export default function GenerateImagePage() {
     setImageUrl(null);
 
     const imputprompt = 'Turing Machine';
-
-    const response = await fetch("/api/generate-image", {
+    const flag = true;
+    const endpoint = flag ? "/api/generate-image" : "/api/get-image";
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ prompt: imputprompt }),
     });
-    
+
 
     const data = await response.json();
     if (data.imagePath) {
