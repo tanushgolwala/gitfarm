@@ -23,6 +23,8 @@ class GestureReader:
         self.get_whiteboard(frame)
         self.xdim = 0
         self.ydim = 0
+
+        self.lastLaserCoords = (0, 0)
         
         if len(self.coords) == 4:
             x_vals, y_vals = zip(*self.coords)
@@ -79,8 +81,8 @@ class GestureReader:
         self.mp_hands = mp.solutions.hands
         self.hands = self.mp_hands.Hands(
             max_num_hands=1,
-            min_detection_confidence=0.7,
-            min_tracking_confidence=0.5
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.3
         )
         self.point_buffer = deque(maxlen=3)
 
@@ -182,6 +184,7 @@ class GestureReader:
                     if self.check_inside_polygon(xval, yval):
                         print(f"Finger join detected at: {xval}, {yval}")
                         self.ws_sender.send_sync(xval, yval, message_type, self.xdim, self.ydim)
+                        self.lastLaserCoords = (xval, yval)
                         return
 
     def thumbs_up_detected(self, hand_landmarks, h, w):
@@ -268,7 +271,7 @@ class GestureReader:
                 recognizer.recognize_async(mp_image, int(self.cap.get(cv2.CAP_PROP_POS_MSEC)))
                 if self.gesture_result and self.gesture_result != "None":
                     print(self.gesture_result)
-                    self.ws_sender.send_sync(100, 100, self.gesture_result, self.xdim, self.ydim)
+                    self.ws_sender.send_sync(100000000, 100, self.gesture_result, self.xdim, self.ydim)
                 else:
                     self.print_finger_join_point(frame)
 

@@ -26,12 +26,21 @@ const WebSocketCanvas = () => {
   const [numPages, setNumPages] = useState(0);
   const [pageNumber, setPageNumber] = useState(1);
   const pointCounterRef = useRef(0);
+  const laserCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const laserCtxRef = useRef<CanvasRenderingContext2D | null>(null);
+  const laserPointerRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
-    if (drawingCanvasRef.current) {
+    if (drawingCanvasRef.current && laserCanvasRef.current) {
       const canvas = drawingCanvasRef.current;
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
+
+      const laserCanvas = laserCanvasRef.current;
+      laserCanvas!.width = window.innerWidth;
+      laserCanvas!.height = window.innerHeight;
+
+      const laserCtx = laserCanvas!.getContext("2d");
 
       const ctx = canvas.getContext("2d");
       if (ctx) {
@@ -42,7 +51,15 @@ const WebSocketCanvas = () => {
         drawingCtxRef.current = ctx;
       }
 
-      drawPoint(0, 0);
+      if (laserCtx) {
+        laserCtxRef.current = laserCtx;
+        laserCtx.clearRect(0, 0, laserCanvas!.width, laserCanvas!.height);
+      }
+
+      return () => {
+        drawingCtxRef.current = null;
+        laserCtxRef.current = null;
+      };
     }
   }, []);
 
@@ -84,6 +101,7 @@ const WebSocketCanvas = () => {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        console.log(data);
         const now = Date.now();
         if (now - lastGestureTimeRef.current > GESTURE_COOLDOWN) {
           lastGestureTimeRef.current = now;
@@ -102,17 +120,17 @@ const WebSocketCanvas = () => {
             goToPreviousPage();
             return;
           }
-        } else if (
-          data.to === "2" &&
-          data.from === "1" &&
-          data.gestval === "draw"
-        ) {
+        } else if (data.to === "2" && data.from === "1") {
           pointCounterRef.current += 1;
+          const x_scaled = data.xval * (window.innerWidth / data.xdim);
+          const y_scaled = data.yval * (window.innerHeight / data.ydim);
+
           if (pointCounterRef.current % 2 === 0) {
-            const x_scaled = data.xval * (window.innerWidth / data.xdim);
-            const y_scaled =
-              data.yval * (window.innerHeight / data.ydim) * 0.75;
-            drawPoint(x_scaled, y_scaled);
+            if (data.gestval === "draw") {
+              drawPoint(x_scaled, y_scaled);
+            } else {
+              updateLaserPointer(x_scaled, y_scaled);
+            }
           }
         }
       } catch (error) {
@@ -151,6 +169,28 @@ const WebSocketCanvas = () => {
     }
 
     lastPointRef.current = { x, y };
+  };
+
+  const updateLaserPointer = (x: number, y: number) => {
+    laserPointerRef.current = { x, y };
+    drawLaserPointer();
+  };
+
+  const drawLaserPointer = () => {
+    if (!laserCtxRef.current || !laserPointerRef.current) return;
+    const laserCtx = laserCtxRef.current;
+    const laserCanvas = laserCanvasRef.current;
+
+    laserCtx.clearRect(0, 0, laserCanvas!.width, laserCanvas!.height);
+
+    if (laserPointerRef.current) {
+      const { x, y } = laserPointerRef.current;
+      laserCtx.beginPath();
+      laserCtx.fillStyle = "#39FF14";
+      laserCtx.arc(x, y, 20, 0, 2 * Math.PI);
+      laserCtx.fill();
+      laserCtx.closePath();
+    }
   };
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
@@ -227,6 +267,14 @@ const WebSocketCanvas = () => {
         <canvas
           ref={drawingCanvasRef}
           className="fixed top-0 left-0 w-full z-10 h-full pointer-events-auto"
+          style={{
+            width: pdfPageWidth ? `${pdfPageWidth}px` : "100%",
+            height: "auto",
+          }}
+        />
+        <canvas
+          ref={laserCanvasRef}
+          className="fixed top-0 left-0 w-full z-20 h-full pointer-events-none"
           style={{
             width: pdfPageWidth ? `${pdfPageWidth}px` : "100%",
             height: "auto",
