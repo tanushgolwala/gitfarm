@@ -35,12 +35,14 @@ const WebSocketCanvas = () => {
 
       const ctx = canvas.getContext("2d");
       if (ctx) {
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 10;
         ctx.strokeStyle = "#880808";
         ctx.lineJoin = "round";
         ctx.lineCap = "round";
         drawingCtxRef.current = ctx;
       }
+
+      drawPoint(0, 0);
     }
   }, []);
 
@@ -107,7 +109,7 @@ const WebSocketCanvas = () => {
         ) {
           pointCounterRef.current += 1;
           if (pointCounterRef.current % 2 === 0) {
-            const x_scaled = data.xval * (window.innerWidth / data.xdim) * 0.75;
+            const x_scaled = data.xval * (window.innerWidth / data.xdim);
             const y_scaled =
               data.yval * (window.innerHeight / data.ydim) * 0.75;
             drawPoint(x_scaled, y_scaled);
@@ -166,7 +168,7 @@ const WebSocketCanvas = () => {
 
     const imgData = canvas.toDataURL("image/png");
 
-    const pdfDoc = new jsPDF("landscape", "px", "a4"); // Fit into A4
+    const pdfDoc = new jsPDF("landscape", "px", "a4"); //
     const pdfWidth = pdfDoc.internal.pageSize.getWidth();
     const pdfHeight = pdfDoc.internal.pageSize.getHeight();
 
@@ -191,7 +193,7 @@ const WebSocketCanvas = () => {
   };
 
   return (
-    <div className="relative w-screen h-screen bg-[#121212] text-white flex items-center justify-center">
+    <div className="relative min-w-screen min-h-screen bg-[#121212] text-white flex items-center justify-center">
       <div
         ref={pdfContainerRef}
         className="relative flex justify-center w-full h-full"
@@ -204,14 +206,14 @@ const WebSocketCanvas = () => {
           >
             <Page
               pageNumber={pageNumber}
-              width={window.innerWidth * 0.8}
+              width={window.innerWidth * 0.9}
               onLoadSuccess={onPageLoadSuccess}
             />
           </Document>
         )}
         <canvas
           ref={drawingCanvasRef}
-          className="absolute top-0 left-0 w-full z-10 h-full pointer-events-auto"
+          className="fixed top-0 left-0 w-full z-10 h-full pointer-events-auto"
           style={{
             width: pdfPageWidth ? `${pdfPageWidth}px` : "100%",
             height: "auto",
@@ -221,7 +223,7 @@ const WebSocketCanvas = () => {
 
       {/* Navigation Controls */}
       {pdfFile && (
-        <div className="absolute top-5 left-1/2 transform -translate-x-1/2 bg-[#222] p-4 rounded-lg shadow-lg border border-gray-700 flex items-center gap-4 z-20">
+        <div className="absolute top-5 transform -translate-x-1/2 bg-[#222] p-4 rounded-lg shadow-lg border border-gray-700 flex items-center gap-4 z-20">
           <button
             onClick={goToPreviousPage}
             disabled={pageNumber <= 1}
@@ -243,7 +245,7 @@ const WebSocketCanvas = () => {
       )}
 
       {/* Control Panel */}
-      <div className="absolute bottom-5 left-1/3 bg-[#222] p-4 z-20 rounded-lg shadow-lg border border-gray-700 flex flex-col items-center gap-3">
+      <div className="absolute bottom-5 bg-[#222] p-4 z-20 rounded-lg shadow-lg border border-gray-700 flex flex-col items-center gap-3">
         <h3 className="text-lg font-semibold">
           WebSocket Status:{" "}
           <span className={isConnected ? "text-green-400" : "text-red-500"}>
