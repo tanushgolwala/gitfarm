@@ -72,7 +72,7 @@ class GestureReader:
             cv2.circle(self.tempimg, (x, y), 5, (0, 0, 255), -1)
             cv2.imshow("image", self.tempimg)
             self.coords.append((x, y))
-            print(f"Point {len(self.coords)} recorded: ({x}, {y})")
+            # print(f"Point {len(self.coords)} recorded: ({x}, {y})")
 
     def init_mediapipe(self):
         """ Initialize MediaPipe for hand tracking. """
@@ -268,7 +268,7 @@ class GestureReader:
                 recognizer.recognize_async(mp_image, int(self.cap.get(cv2.CAP_PROP_POS_MSEC)))
                 if self.gesture_result and self.gesture_result != "None":
                     print(self.gesture_result)
-                    self.ws_sender.send_sync(0, 0, self.gesture_result, self.xdim, self.ydim)
+                    self.ws_sender.send_sync(100, 100, self.gesture_result, self.xdim, self.ydim)
                 else:
                     self.print_finger_join_point(frame)
 
@@ -282,6 +282,7 @@ class WebSocketSyncSender:
 
     def send_sync(self, xval, yval, gestval, xdim, ydim):
         """ Send (xval, yval) data synchronously to WebSocket. """
+        print(f"Sending message: {xval}, {yval}, {gestval}")
         message = json.dumps({
             'to': self.to_id,
             'from': self.from_id,
