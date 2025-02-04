@@ -9,7 +9,7 @@ import asyncio
 class GestureReader:
     def __init__(self, ip, ws_sender):
         try:
-            self.cap = cv2.VideoCapture(1)
+            self.cap = cv2.VideoCapture(0)
         except:
             self.cap = cv2.VideoCapture(0)
 
@@ -85,11 +85,12 @@ class GestureReader:
                 h, w, _ = frame.shape
                 fingers_together, join_point = self.fingers_joined(hand_landmarks, h, w)
 
-                if fingers_together and join_point:
+                if join_point:
                     xval, yval = join_point
+                    message_type = "draw" if fingers_together else "laser"
                     if self.check_inside_polygon(xval, yval):
-                        print(f"Finger join detected at: {xval}, {yval}")
-                        self.ws_sender.send_sync(xval, yval)
+                        print(f"Finger detected at: {xval}, {yval} with type {message_type}")
+                        self.ws_sender.send_sync(xval, yval, message_type)
 
     def start_recognition(self):
         """ Start the video capture loop and process frames. """
@@ -98,7 +99,7 @@ class GestureReader:
             if not ret:
                 break
 
-            # frame = cv2.flip(frame, 1)
+            frame = cv2.flip(frame, 1)
             self.print_finger_join_point(frame)
 
 class WebSocketSyncSender:
@@ -108,14 +109,14 @@ class WebSocketSyncSender:
         self.to_id = to_id
         self.socket = None
 
-    def send_sync(self, xval, yval):
+    def send_sync(self, xval, yval, gestval):
         """ Send (xval, yval) data synchronously to WebSocket. """
         message = json.dumps({
             'to': self.to_id,
             'from': self.from_id,
             'xval': xval,
             'yval': yval,
-            'gestval': 'tap'  # Replace with real gesture logic if needed
+            'gestval': gestval
         })
         try:
             asyncio.run(self._send_message(message))
@@ -131,5 +132,5 @@ class WebSocketSyncSender:
 ws_sender = WebSocketSyncSender('ws://localhost:8080/ws', '1', '2')
 
 # Start GestureReader with WebSocket integration
-reader = GestureReader("rtsp://192.0.0.4:8080/h264_pcm.sdp", ws_sender)
+reader = GestureReader("rtsp://100.91.39.25:8080/h264_pcm.sdp", ws_sender)
 reader.start_recognition()
