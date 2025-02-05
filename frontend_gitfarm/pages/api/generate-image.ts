@@ -4,7 +4,10 @@ import path from "path";
 
 const model = "@cf/stabilityai/stable-diffusion-xl-base-1.0";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
@@ -23,7 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${API_KEY}`,
+          Authorization: `Bearer ${API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ prompt }),
@@ -33,11 +36,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const buffer = await response.arrayBuffer();
     const imageBuffer = Buffer.from(buffer);
 
-    const imagePath = path.join(process.cwd(), "public", "generated", "image.png");
+    const timestamp = Date.now();
+    const imagePath = path.join(
+      process.cwd(),
+      "public",
+      "generated",
+      `img_${timestamp}.png`
+    );
     fs.mkdirSync(path.dirname(imagePath), { recursive: true });
     fs.writeFileSync(imagePath, imageBuffer);
 
-    return res.status(200).json({ imagePath: "/generated/image.png" });
+    return res
+      .status(200)
+      .json({ imagePath: `/generated/img_${timestamp}.png` });
   } catch (error) {
     console.error("Error generating image:", error);
     return res.status(500).json({ error: "Something went wrong" });

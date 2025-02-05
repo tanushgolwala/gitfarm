@@ -1,19 +1,147 @@
 "use client";
-import { useCallback } from "react";
+import { useCallback, useTransition } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
-import VoiceInputModal from "./VoiceModal";
+
+import "regenerator-runtime/runtime";
+
+import SpeechRecognition, {
+  useSpeechRecognition,
+} from "react-speech-recognition";
+import Image from "next/image";
 
 // Configure PDF worker source
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 const WS_SERVER = "ws://localhost:8080/ws?id=2";
 const DISTANCE_THRESHOLD = 50;
-const GESTURE_COOLDOWN = 500;
+const GESTURE_COOLDOWN = 1000;
+
+interface SpeechModalProps {
+  showImageModal: boolean;
+  toggleModal: () => void;
+}
+
+const SpeechModal = ({ showImageModal, toggleModal }: SpeechModalProps) => {
+  const [isListening, setIsListening] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const { transcript, resetTranscript } = useSpeechRecognition();
+  const [imageRender, setImageRender] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [imagePath, setImagePath] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (showImageModal) {
+      setIsListening(true);
+      SpeechRecognition.startListening({ continuous: true });
+
+      const stopTimer = setTimeout(() => {
+        SpeechRecognition.stopListening();
+        setIsListening(false);
+        startTransition(() => handleStopListening({ inputPrompt: transcript }));
+      }, 5000);
+
+      return () => clearTimeout(stopTimer);
+    }
+  }, [showImageModal]);
+
+  const handleStopListening = async ({
+    inputPrompt,
+  }: {
+    inputPrompt: string;
+  }) => {
+    setIsLoading(true); // Show loader
+
+    try {
+      await fetch("/api/generate-image", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt: inputPrompt }),
+      });
+      setImagePath("/generated/image.png");
+      setImageRender(true);
+    } catch (error) {
+      console.error("Error fetching image:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Escape") {
+      setImageRender(false);
+    }
+  };
+
+  return (
+    showImageModal && (
+      <div className="absolute top-0 left-0 w-full h-full bg-gray-900 bg-opacity-50 flex items-center justify-center z-30">
+        <div className="relative bg-black p-6 rounded-xl shadow-lg w-80 h-96 flex flex-col items-center justify-center">
+          <h2 className="text-lg font-semibold text-white">
+            {isListening ? "Listening..." : "Speech Input"}
+          </h2>
+          {/* Floating spheres container */}
+          <div className="relative w-32 h-16 mt-6 flex justify-center items-center space-x-2">
+            <div className="w-4 h-4 bg-blue-400 rounded-full animate-pulse"></div>
+            <div className="w-5 h-5 bg-blue-500 rounded-full animate-float"></div>
+            <div className="w-6 h-6 bg-blue-600 rounded-full animate-pulse"></div>
+            <div className="w-5 h-5 bg-blue-500 rounded-full animate-float"></div>
+            <div className="w-4 h-4 bg-blue-400 rounded-full animate-pulse"></div>
+          </div>
+          {/* Speech-to-Text Input */}
+          <div className="relative mt-6 w-72">
+            {isPending && (
+              <div className="absolute top-0 left-0 w-full h-full bg-black bg-opacity-50 flex items-center justify-center">
+                <div className="w-16 h-16 border-4 border-blue-500 rounded-full animate-spin"></div>
+              </div>
+            )}
+
+            <input
+              type="text"
+              value={transcript}
+              readOnly
+              className="w-full bg-transparent border border-blue-500 text-blue-300 text-sm p-2 rounded-md text-center placeholder-blue-400 focus:outline-none animate-glow"
+              placeholder="Say something..."
+              onKeyDown={handleKeyDown}
+            />
+          </div>
+
+          {/* Loader while fetching the image */}
+          {isLoading && (
+            <div className="mt-4">
+              <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-white mt-2">Generating Image...</p>
+            </div>
+          )}
+
+          {/* Render Image when ready */}
+          {imageRender && !isLoading && imagePath && (
+            <Image
+              src={imagePath}
+              alt="Generated Image"
+              width={150}
+              height={150}
+              onKeyDown={handleKeyDown}
+            />
+          )}
+
+          <button
+            onClick={toggleModal}
+            className="mt-4 bg-red-500 text-white px-4 py-2 rounded-lg"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    )
+  );
+};
 
 const WebSocketCanvas = () => {
   const drawingCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -129,12 +257,26 @@ const WebSocketCanvas = () => {
           ) {
             setShowImageModal((prev) => !prev);
             return;
+          } else if (
+            data.to === "2" &&
+            data.from === "1" &&
+            data.gestval === "Open_Palm"
+          ) {
+            resetCanvas();
+            return;
+          } else if (
+            data.to === "2" &&
+            data.from === "1" &&
+            data.gestval === "Close_Palm"
+          ) {
+            //NEED TO IMPLEMENT THE QUESTION FUNCTIONALITY
+            //             return;
           }
         } else if (data.to === "2" && data.from === "1") {
           pointCounterRef.current += 1;
           const x_scaled = data.xval * (window.innerWidth / data.xdim);
           const y_scaled = data.yval * (window.innerHeight / data.ydim);
-
+          console.log("scaled", x_scaled, y_scaled);
           if (pointCounterRef.current % 2 === 0) {
             if (data.gestval === "draw") {
               drawPoint(x_scaled, y_scaled);
@@ -297,37 +439,7 @@ const WebSocketCanvas = () => {
       </div>
 
       {/* Modal */}
-      {showImageModal && (
-        <div className="absolute top-0 left-0 w-full h-full bg-gray-900 bg-opacity-50 flex items-center justify-center z-30">
-          <div className="relative bg-black p-6 rounded-xl shadow-lg w-80 h-96 flex flex-col items-center justify-center">
-            <h2 className="text-lg font-semibold text-white">Listening...</h2>
-
-            {/* Floating spheres container */}
-            <div className="relative w-32 h-16 mt-6 flex justify-center items-center space-x-2">
-              <div className="w-4 h-4 bg-blue-400 rounded-full animate-pulse"></div>
-              <div className="w-5 h-5 bg-blue-500 rounded-full animate-float"></div>
-              <div className="w-6 h-6 bg-blue-600 rounded-full animate-pulse"></div>
-              <div className="w-5 h-5 bg-blue-500 rounded-full animate-float"></div>
-              <div className="w-4 h-4 bg-blue-400 rounded-full animate-pulse"></div>
-            </div>
-
-            {/* Cool Text Box */}
-            <div className="relative mt-6 w-72">
-              <input
-                type="text"
-                className="w-full bg-transparent border border-blue-500 text-blue-300 text-sm p-2 rounded-md text-center placeholder-blue-400 focus:outline-none animate-glow"
-              />
-            </div>
-
-            <button
-              onClick={toggleModal}
-              className="mt-6 bg-red-500 text-white px-4 py-2 rounded-lg"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
+      <SpeechModal showImageModal={showImageModal} toggleModal={toggleModal} />
 
       {/* Navigation Controls */}
       {pdfFile && (

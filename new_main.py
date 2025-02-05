@@ -9,7 +9,7 @@ import asyncio
 class GestureReader:
     def __init__(self, ip, ws_sender):
         try:
-            self.cap = cv2.VideoCapture(0)
+            self.cap = cv2.VideoCapture(ip)
         except:
             self.cap = cv2.VideoCapture(0)
 
@@ -30,7 +30,10 @@ class GestureReader:
             x_vals, y_vals = zip(*self.coords)
             self.xdim = max(x_vals) - min(x_vals)
             self.ydim = max(y_vals) - min(y_vals)
+            self.top_left_x = min(x_vals)
+            self.top_left_y = min(y_vals)
         else:
+
             self.xdim, self.ydim = 1920, 1080
         print(f"Whiteboard dimensions: {self.xdim} x {self.ydim}")
         self.init_mediapipe()
@@ -183,7 +186,7 @@ class GestureReader:
                     message_type = "draw" if fingers_together else "laser"
                     if self.check_inside_polygon(xval, yval):
                         print(f"Finger join detected at: {xval}, {yval}")
-                        self.ws_sender.send_sync(xval, yval, message_type, self.xdim, self.ydim)
+                        self.ws_sender.send_sync(xval, yval, message_type, self.xdim, self.ydim, self.top_left_x, self.top_left_y)
                         self.lastLaserCoords = (xval, yval)
                         return
 
@@ -259,6 +262,8 @@ class GestureReader:
 
     def start_recognition(self):
         """ Start the video capture loop and process frames. """
+        timestamp = 0  # Manually track timestamps
+
         with self.GestureRecognizer.create_from_options(self.options) as recognizer:
             while self.cap.isOpened():
                 ret, frame = self.cap.read()
@@ -268,10 +273,12 @@ class GestureReader:
                 frame = cv2.flip(frame, 1)
 
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-                recognizer.recognize_async(mp_image, int(self.cap.get(cv2.CAP_PROP_POS_MSEC)))
+                recognizer.recognize_async(mp_image, timestamp)
+                timestamp += 1  # Ensure monotonically increasing timestamps
+
                 if self.gesture_result and self.gesture_result != "None":
                     print(self.gesture_result)
-                    self.ws_sender.send_sync(100000000, 100, self.gesture_result, self.xdim, self.ydim)
+                    self.ws_sender.send_sync(10000, 100, self.gesture_result, self.xdim, self.ydim)
                 else:
                     self.print_finger_join_point(frame)
 
@@ -283,14 +290,17 @@ class WebSocketSyncSender:
         self.to_id = to_id
         self.socket = None
 
-    def send_sync(self, xval, yval, gestval, xdim, ydim):
+    def send_sync(self, xval, yval, gestval, xdim, ydim, top_leftx, top_lefty):
         """ Send (xval, yval) data synchronously to WebSocket. """
         print(f"Sending message: {xval}, {yval}, {gestval}")
+        relative_x = xval - top_leftx
+        relative_y = yval - top_lefty
+
         message = json.dumps({
             'to': self.to_id,
             'from': self.from_id,
-            'xval': xval,
-            'yval': yval,
+            'xval': relative_x,
+            'yval': relative_y,
             'gestval': gestval,
             'xdim': xdim,
             'ydim': ydim
@@ -305,5 +315,5 @@ class WebSocketSyncSender:
             await websocket.send(message)
 
 ws_sender = WebSocketSyncSender('ws://localhost:8080/ws', '1', '2')
-reader = GestureReader("rtsp://192.0.0.4:8080/h264_pcm.sdp", ws_sender)
+reader = GestureReader("rtsp://100.104.52.142:8080/h264_pcm.sdp", ws_sender)
 reader.start_recognition()
