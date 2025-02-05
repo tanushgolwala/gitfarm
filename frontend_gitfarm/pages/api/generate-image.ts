@@ -36,19 +36,16 @@ export default async function handler(
     const buffer = await response.arrayBuffer();
     const imageBuffer = Buffer.from(buffer);
 
-    const timestamp = Date.now();
     const imagePath = path.join(
       process.cwd(),
       "public",
       "generated",
-      `img_${timestamp}.png`
+      "image.png"
     );
     fs.mkdirSync(path.dirname(imagePath), { recursive: true });
     fs.writeFileSync(imagePath, imageBuffer);
 
-    return res
-      .status(200)
-      .json({ imagePath: `/generated/img_${timestamp}.png` });
+    return res.status(200).json({ imagePath: "/generated/image.png" });
   } catch (error) {
     console.error("Error generating image:", error);
     return res.status(500).json({ error: "Something went wrong" });

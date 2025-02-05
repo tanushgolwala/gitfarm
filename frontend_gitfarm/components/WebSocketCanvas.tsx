@@ -12,14 +12,13 @@ import "regenerator-runtime/runtime";
 import SpeechRecognition, {
   useSpeechRecognition,
 } from "react-speech-recognition";
-import Image from "next/image";
 
 // Configure PDF worker source
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 const WS_SERVER = "ws://localhost:8080/ws?id=2";
 const DISTANCE_THRESHOLD = 50;
-const GESTURE_COOLDOWN = 1000;
+const GESTURE_COOLDOWN = 1500;
 
 interface SpeechModalProps {
   showImageModal: boolean;
@@ -122,13 +121,7 @@ const SpeechModal = ({ showImageModal, toggleModal }: SpeechModalProps) => {
 
           {/* Render Image when ready */}
           {imageRender && !isLoading && imagePath && (
-            <Image
-              src={imagePath}
-              alt="Generated Image"
-              width={150}
-              height={150}
-              onKeyDown={handleKeyDown}
-            />
+            <img src={imagePath} className="mt-4 w-32 h-32" />
           )}
 
           <button
@@ -140,6 +133,155 @@ const SpeechModal = ({ showImageModal, toggleModal }: SpeechModalProps) => {
         </div>
       </div>
     )
+  );
+};
+
+const TextModal: React.FC<SpeechModalProps> = ({
+  showImageModal,
+  toggleModal,
+}) => {
+  // State management
+  const [isListening, setIsListening] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const [isLoading, setIsLoading] = useState(false);
+  const [generatedText, setGeneratedText] = useState<string>("");
+  const [inputText, setInputText] = useState("");
+
+  // Speech recognition setup
+  const { transcript, resetTranscript } = useSpeechRecognition();
+
+  // Effect to handle speech recognition
+  useEffect(() => {
+    if (!showImageModal) return;
+
+    setIsListening(true);
+    SpeechRecognition.startListening({ continuous: true });
+    setInputText(transcript);
+
+    const stopTimer = setTimeout(() => {
+      SpeechRecognition.stopListening();
+      setIsListening(false);
+
+      const finalTranscript = transcript;
+      setInputText(finalTranscript);
+
+      if (finalTranscript.trim()) {
+        startTransition(() => handleStopListening(finalTranscript));
+      }
+    }, 5000);
+
+    return () => {
+      clearTimeout(stopTimer);
+      SpeechRecognition.stopListening();
+    };
+  }, [showImageModal, transcript]);
+
+  // Handle text generation
+  const handleStopListening = async (inputPrompt: string) => {
+    if (!inputPrompt.trim()) return;
+
+    setIsLoading(true);
+    try {
+      const response = await fetch("/api/gen-ques", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt: inputPrompt }),
+      });
+
+      const data = await response.json();
+      setGeneratedText(data.question); // Now storing text instead of image path
+    } catch (error) {
+      console.error("Error generating text:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle keyboard events
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      startTransition(() => handleStopListening(inputText));
+    }
+  };
+
+  // Handle manual input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputText(e.target.value);
+  };
+
+  if (!showImageModal) return null;
+
+  return (
+    <div className="absolute top-0 left-0 w-full h-full bg-gray-900 bg-opacity-50 flex items-center justify-center z-30">
+      <div className="relative bg-black p-6 rounded-xl shadow-lg w-80 h-96 flex flex-col items-center justify-center">
+        {/* Title */}
+        <h2 className="text-lg font-semibold text-white mb-4">
+          {isListening ? "Listening..." : "Voice to Text"}
+        </h2>
+
+        {/* Animated Spheres (only show while listening) */}
+        {isListening && (
+          <div className="relative w-32 h-16 mb-4 flex justify-center items-center space-x-2">
+            {[...Array(5)].map((_, i) => (
+              <div
+                key={i}
+                className={`w-${i % 2 ? 5 : 4} h-${i % 2 ? 5 : 4} 
+                  bg-blue-${400 + i * 100} rounded-full 
+                  ${i % 2 ? "animate-float" : "animate-pulse"}`}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Input Section */}
+        <div className="relative w-72 mb-4">
+          {isPending && (
+            <div className="absolute top-0 left-0 w-full h-full bg-black bg-opacity-50 flex items-center justify-center">
+              <div className="w-8 h-8 border-4 border-blue-500 rounded-full animate-spin" />
+            </div>
+          )}
+
+          <input
+            type="text"
+            value={inputText}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            className="w-full bg-transparent border border-blue-500 text-blue-300 
+                     text-sm p-2 rounded-md text-center placeholder-blue-400 
+                     focus:outline-none animate-glow"
+            placeholder="Say something or type..."
+          />
+        </div>
+
+        {/* Loading State */}
+        {isLoading && (
+          <div className="text-center mb-4">
+            <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-white mt-2">Generating Response...</p>
+          </div>
+        )}
+
+        {/* Generated Text Display */}
+        {generatedText && !isLoading && (
+          <div className="w-full mb-4 overflow-y-auto">
+            <p className="text-white text-sm bg-gray-800 p-3 rounded-lg">
+              {generatedText}
+            </p>
+          </div>
+        )}
+
+        {/* Close Button */}
+        <button
+          onClick={toggleModal}
+          className="mt-auto bg-red-500 text-white px-4 py-2 rounded-lg 
+                   hover:bg-red-600 transition-colors"
+        >
+          Close
+        </button>
+      </div>
+    </div>
   );
 };
 
@@ -160,6 +302,7 @@ const WebSocketCanvas = () => {
   const laserPointerRef = useRef<{ x: number; y: number } | null>(null);
 
   const [showImageModal, setShowImageModal] = useState(false);
+  const [showTextModal, setShowTextModal] = useState(false);
 
   useEffect(() => {
     if (drawingCanvasRef.current && laserCanvasRef.current) {
@@ -267,10 +410,10 @@ const WebSocketCanvas = () => {
           } else if (
             data.to === "2" &&
             data.from === "1" &&
-            data.gestval === "Close_Palm"
+            data.gestval === "Closed_Fist"
           ) {
-            //NEED TO IMPLEMENT THE QUESTION FUNCTIONALITY
-            //             return;
+            setShowTextModal((prev) => !prev);
+            return;
           }
         } else if (data.to === "2" && data.from === "1") {
           pointCounterRef.current += 1;
@@ -401,6 +544,10 @@ const WebSocketCanvas = () => {
     setShowImageModal((prev) => !prev);
   };
 
+  const toggleTextModal = () => {
+    setShowTextModal((prev) => !prev);
+  };
+
   return (
     <div className="relative min-w-screen min-h-screen bg-[#121212] text-white flex items-center justify-center">
       <div
@@ -440,6 +587,7 @@ const WebSocketCanvas = () => {
 
       {/* Modal */}
       <SpeechModal showImageModal={showImageModal} toggleModal={toggleModal} />
+      <TextModal showImageModal={showTextModal} toggleModal={toggleTextModal} />
 
       {/* Navigation Controls */}
       {pdfFile && (

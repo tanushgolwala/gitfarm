@@ -10,16 +10,16 @@ export default function GenerateQuestionPage() {
     setQuestion(null);
 
     const topic = "Linear Algebra";
-    const prompt = `Can you please give me a question on ${topic}. This question should be a long answer type question and may or may not include numericals. It has to be solved by college students.`;
+    const prompt = `Can you please give me a question on ${topic}. This question should be a long answer type question and may or may not include numericals. It has to be solved by college students. Keep it short, and to the point, in bullet points, since I want these points in a PPT presentation`;
     const flag = true;
     const endpoint = flag ? "/api/gen-ques" : "/api/gen-ques";
-    
+
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify({ prompt}),
+      body: JSON.stringify({ prompt }),
     });
 
     const data = await response.json();
@@ -41,9 +41,7 @@ export default function GenerateQuestionPage() {
       </button>
 
       {question && (
-        <p className="mt-4 text-lg font-semibold text-center">
-          {question}
-        </p>
+        <p className="mt-4 text-lg font-semibold text-center">{question}</p>
       )}
     </div>
   );
