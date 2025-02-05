@@ -9,7 +9,7 @@ import asyncio
 class GestureReader:
     def __init__(self, ip, ws_sender):
         try:
-            self.cap = cv2.VideoCapture(ip)
+            self.cap = cv2.VideoCapture(4)
         except:
             self.cap = cv2.VideoCapture(0)
 
@@ -278,7 +278,7 @@ class GestureReader:
 
                 if self.gesture_result and self.gesture_result != "None":
                     print(self.gesture_result)
-                    self.ws_sender.send_sync(10000, 100, self.gesture_result, self.xdim, self.ydim)
+                    self.ws_sender.send_sync(10000, 100, self.gesture_result, self.xdim, self.ydim, self.top_left_x, self.top_left_y)
                 else:
                     self.print_finger_join_point(frame)
 

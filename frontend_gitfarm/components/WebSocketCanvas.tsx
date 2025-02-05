@@ -310,9 +310,9 @@ const WebSocketCanvas = () => {
 
       if (distance > DISTANCE_THRESHOLD) {
         ctx.beginPath();
-        ctx.moveTo(x, y);
+        ctx.moveTo(window.innerWidth - x, y);
       } else {
-        ctx.lineTo(x, y);
+        ctx.lineTo(window.innerWidth - x, y);
         ctx.stroke();
       }
     } else {
@@ -339,7 +339,7 @@ const WebSocketCanvas = () => {
       const { x, y } = laserPointerRef.current;
       laserCtx.beginPath();
       laserCtx.fillStyle = "#39FF14";
-      laserCtx.arc(x, y, 20, 0, 2 * Math.PI);
+      laserCtx.arc(window.innerWidth - x, y, 20, 0, 2 * Math.PI);
       laserCtx.fill();
       laserCtx.closePath();
     }
